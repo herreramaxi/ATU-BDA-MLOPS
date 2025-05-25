@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: spam-app
-        image: herreramaxi/spam-modelbuild:latest
+        image: herreramaxi/spam-modelbuild
         ports:
           - containerPort: 5000
         resources:
