@@ -50,6 +50,8 @@ jobs:
                   --project ${{ secrets.GCP_PROJECT }}
 
             - name: Deploy to GKE
+              env:
+                USE_GKE_GCLOUD_AUTH_PLUGIN: "False"
               run: |
                 kubectl apply -f kubernetes/
                 kubectl rollout status deployment/spam-app
