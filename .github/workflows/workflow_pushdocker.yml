@@ -1,12 +1,9 @@
 name: workflow_pushdocker
 on:
-    workflow_dispatch:  
-    #this will only run if Dockerfile changes after a push
-    push:
-        branches:
-            - main
-        paths:
-            - 'Dockerfile'    
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
     publish_images:
