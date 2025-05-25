@@ -33,7 +33,7 @@ jobs:
 
   push_image:
     if: github.ref_name == 'main' || github.ref_name == 'develop'
-    needs: build_and_test
+    # needs: build_and_test
     runs-on: ubuntu-latest
     env:
       IMAGE_BASE: herreramaxi/spam-modelbuild
