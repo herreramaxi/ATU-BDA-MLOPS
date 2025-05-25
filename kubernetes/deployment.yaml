@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spam-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spam-app
+  template:
+    metadata:
+      labels:
+        app: spam-app
+    spec:
+      containers:
+      - name: spam-app
+        image: herreramaxi/spam-modelbuild:latest
+        ports:
+          - containerPort: 5000
