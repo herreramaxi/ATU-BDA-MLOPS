@@ -1,52 +1,82 @@
-name: workflow_pushdocker
+name: CI/CD Workflow
+
 on:
   push:
     branches:
       - main
+      - develop
+      - 'feature/**'
   workflow_dispatch:
 
+env:
+  IMAGE_BASE: herreramaxi/spam-modelbuild
+  IMAGE_TAG: ${{ github.ref == 'refs/heads/main' && 'prod' || (github.ref == 'refs/heads/develop' && 'dev' || '') }}-${{ github.run_number }}
+  ENV_NAMESPACE: ${{ github.ref == 'refs/heads/main' && 'prod' || (github.ref == 'refs/heads/develop' && 'dev' || '') }}
+
 jobs:
-    publish_images:
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout Code
-              uses: actions/checkout@v4
-            - name: Printing Folders
-              run:
-                ls
-            - name: Login to Docker
-              uses: docker/login-action@v1
-              with:
-                username: ${{secrets.DOCKER_HUB_USERNAME}}
-                password: ${{secrets.DOCKER_HUB_ACCESS_TOKEN}}
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      full_tag: ${{ steps.set_tag.outputs.full_tag }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-            - name: build image
-              run: 
-                 
-                docker build . -t herreramaxi/spam-modelbuild:latest
+      - name: Set image tag
+        id: set_tag
+        run: echo "full_tag=${{ env.IMAGE_BASE }}:${{ env.IMAGE_TAG }}" >> $GITHUB_OUTPUT
 
-            - name: push image to docker hub
-              run: |
-                docker push herreramaxi/spam-modelbuild:latest
-           
-            - name: Authenticate to Google Cloud
-              uses: "google-github-actions/auth@v2"
-              with:
-                credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+      - name: Build Docker image
+        run: docker build . -t ${{ steps.set_tag.outputs.full_tag }}
 
-            - uses: "google-github-actions/setup-gcloud@v2"
-              with:
-                install_components: "gke-gcloud-auth-plugin"
+  push:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-            - name: Authenticate to GKE cluster
-              uses: google-github-actions/get-gke-credentials@v2
-              with:
-                cluster_name: hello-cluster
-                location: europe-west4
+      - name: Login to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
-            - name: Deploy to GKE
-              # env:
-              #   USE_GKE_GCLOUD_AUTH_PLUGIN: "False"
-              run: |
-                kubectl apply -f kubernetes/
-                kubectl rollout status deployment/spam-app
+      - name: Tag and Push Docker image
+        run: |
+          docker tag ${{ needs.build.outputs.full_tag }} ${{ env.IMAGE_BASE }}:latest
+          docker push ${{ needs.build.outputs.full_tag }}
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            docker push ${{ env.IMAGE_BASE }}:latest
+          fi
+
+  deploy:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    needs: push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - name: Set up gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: "gke-gcloud-auth-plugin"
+
+      - name: Authenticate to GKE cluster
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: hello-cluster
+          location: europe-west4
+
+      - name: Deploy to ${{ env.ENV_NAMESPACE }}
+        run: |
+          kubectl config set-context --current --namespace=${{ env.ENV_NAMESPACE }}
+          kubectl set image deployment/spam-app spam-app=${{ env.IMAGE_BASE }}:${{ env.IMAGE_TAG }}
+          kubectl rollout status deployment/spam-app
