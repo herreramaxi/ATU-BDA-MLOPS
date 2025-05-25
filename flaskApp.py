@@ -6,7 +6,7 @@ import pickle
 
 app=Flask(__name__)
 model=load("SpamModel.pkl")
-version = "1.0.0"
+version = "1.0.1"
 
 @app.route('/version')
 def welcome():
