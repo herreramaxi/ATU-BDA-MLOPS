@@ -4,6 +4,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 import numpy as np
 import pandas as pd
+from joblib import dump
 
 data=pd.read_csv('spam.csv')
 data['Spam']=data['Category'].apply(lambda x:1 if x=='spam' else 0)
