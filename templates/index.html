@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spam Prediction</title>
+</head>
+
+<body>
+    <h1>Spam Prediction</h1>
+    <form action="/predict" method="post">
+        <label for="text">Text:</label>
+        <input type="text" id="text" name="text" required><br><br>
+
+        <button type="submit">Submit</button>
+    </form>
+    <footer>
+        {% if version %}
+        <p>Version: {{ version }}</p>
+        {% else %}
+        <p>Version: 1234</p>
+        {% endif %}
+    </footer>
+</body>
+
+</html>
