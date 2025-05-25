@@ -30,24 +30,24 @@ jobs:
             #   run: |
             #     docker push herreramaxi/spam-modelbuild:latest
 
-            # 1. Authenticate using a service account key
+           
             - name: Authenticate to Google Cloud
               uses: google-github-actions/auth@v1
               with:
                 credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
 
-            # 2. Set up the gcloud CLI
             - name: Set up Google Cloud SDK
               uses: google-github-actions/setup-gcloud@v2
               with:
                 project_id: ${{ secrets.GCP_PROJECT }}
 
-            # 3. Get credentials for your GKE cluster
             - name: Get GKE credentials
               run: |
                 gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} \
                   --region ${{ secrets.GKE_REGION }} \
                   --project ${{ secrets.GCP_PROJECT }}
+                # Clean up deprecated auth-provider
+                kubectl config unset users.gke_${{ secrets.GCP_PROJECT }}_${{ secrets.GKE_REGION }}_${{ secrets.GKE_CLUSTER }}.auth-provider
 
             - name: Deploy to GKE
               env:
