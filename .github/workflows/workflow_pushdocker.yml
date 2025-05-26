@@ -48,6 +48,7 @@ jobs:
 
       - name: Upload model to GCS
         run: |
+          unset CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE
           gsutil cp SpamModel.pkl gs://spam-data-pipeline/models/SpamModel.pkl
 
       # Tests not yet implemented
