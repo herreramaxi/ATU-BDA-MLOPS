@@ -7,6 +7,8 @@ on:
       - develop
       - 'feature/**'
   workflow_dispatch:
+  repository_dispatch:
+    types: [trigger-ml-cicd]
 
 env:
   IMAGE_BASE: herreramaxi/spam-modelbuild
