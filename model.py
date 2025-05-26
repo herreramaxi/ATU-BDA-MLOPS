@@ -7,9 +7,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.feature_extraction.text import CountVectorizer
 
 def load_data():
-    dataset_path = os.getenv("DATASET_PATH", "gs://spam-data-pipeline/full/spam.csv")
-    if not dataset_path:
-        dataset_path
+    dataset_path = os.getenv("DATASET_PATH", 'spam.csv')#"gs://spam-data-pipeline/full/spam.csv")
 
     print(f"Loading dataset from: {dataset_path}")
     df = pd.read_csv(dataset_path)

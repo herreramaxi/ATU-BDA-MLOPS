@@ -25,6 +25,14 @@ jobs:
         uses: google-github-actions/auth@v1
         with:
           credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+          create_credentials_file: true
+          credentials_file_path: ${{ github.workspace }}/gha-creds.json
+
+      - name: Activate service account for gsutil
+        run: |
+          gcloud auth activate-service-account --key-file="${{ github.workspace }}/gha-creds.json"
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gha-creds.json
 
       - name: Install dependencies
         run: |
