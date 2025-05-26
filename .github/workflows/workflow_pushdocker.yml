@@ -46,10 +46,9 @@ jobs:
       - name: Run tests
         run: pytest tests/
 
-      - name: Upload model to GCS
+      - name: Upload model to GCS using gcloud
         run: |
-          unset CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE
-          gsutil cp SpamModel.pkl gs://spam-data-pipeline/models/SpamModel.pkl
+          gcloud storage cp SpamModel.pkl gs://spam-data-pipeline/models/SpamModel.pkl
 
       # Tests not yet implemented
       # - name: Install test dependencies
