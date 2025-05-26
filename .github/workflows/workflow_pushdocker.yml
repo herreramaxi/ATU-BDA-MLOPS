@@ -13,23 +13,32 @@ env:
   IMAGE_TAG: ${{ github.run_number }}
 
 jobs:
-  # build_and_test:
-  #   runs-on: ubuntu-latest    
-  #   env:
-  #     IMAGE_BASE: herreramaxi/spam-modelbuild
-  #     IMAGE_TAG: ${{ github.run_number }}
-  #   steps:
-  #     - uses: actions/checkout@v4
+  build_and_test:
+    runs-on: ubuntu-latest    
+    env:
+      IMAGE_BASE: herreramaxi/spam-modelbuild
+      IMAGE_TAG: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
 
-  #     # Tests not yet implemented
-  #     # - name: Install test dependencies
-  #     #   run: pip install -r requirements.txt
+      - name: Install test dependencies
+        run: pip install pandas scikit-learn joblib pytest
 
-  #     # - name: Run tests
-  #     #   run: pytest tests/
+      - name: Generate model
+        run: python model.py
 
-  #     - name: Build Docker image
-  #       run: docker build . -t $IMAGE_BASE:$IMAGE_TAG
+      - name: Run tests
+        run: pytest tests/
+
+      # Tests not yet implemented
+      # - name: Install test dependencies
+      #   run: pip install -r requirements.txt
+
+      # - name: Run tests
+      #   run: pytest tests/
+
+      # - name: Build Docker image
+      #   run: docker build . -t $IMAGE_BASE:$IMAGE_TAG
 
   push_image:
     if: github.ref_name == 'main' || github.ref_name == 'develop'
