@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: spam-app
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: spam-app
@@ -19,7 +19,7 @@ spec:
           - containerPort: 5000
         resources:
           requests:
-            cpu: "500m"
+            cpu: "100m"
             memory: "512Mi"
           limits:
             cpu: "1000m"
