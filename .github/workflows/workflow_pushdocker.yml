@@ -21,14 +21,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install test dependencies
-        run: pip install pandas scikit-learn joblib pytest
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
 
-      - name: Generate model
+      - name: Install dependencies
+        run: |
+          pip install pandas scikit-learn joblib pytest gcsfs
+
+      - name: Train model (loads dataset from GCS)
         run: python model.py
+        env:
+          DATASET_PATH: gs://spam-data-pipeline/full/spam.csv
 
       - name: Run tests
         run: pytest tests/
+
+      - name: Upload model to GCS
+        run: |
+          gsutil cp SpamModel.pkl gs://spam-data-pipeline/models/SpamModel.pkl
 
       # Tests not yet implemented
       # - name: Install test dependencies
@@ -37,18 +49,13 @@ jobs:
       # - name: Run tests
       #   run: pytest tests/
 
-      # - name: Build Docker image
-      #   run: docker build . -t $IMAGE_BASE:$IMAGE_TAG
-
-  push_image:
-    if: github.ref_name == 'main' || github.ref_name == 'develop'
-    # needs: build_and_test
-    runs-on: ubuntu-latest
-    env:
-      IMAGE_BASE: herreramaxi/spam-modelbuild
-      IMAGE_TAG: ${{ github.run_number }}
-    steps:
-      - uses: actions/checkout@v4
+      - name: Build Docker image
+        # run: docker build . -t $IMAGE_BASE:$IMAGE_TAG
+        run: |
+          docker build . -t $IMAGE_BASE:$IMAGE_TAG
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            docker tag $IMAGE_BASE:$IMAGE_TAG $IMAGE_BASE:latest
+          fi
 
       - name: Login to Docker Hub
         uses: docker/login-action@v1
@@ -56,23 +63,47 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
-      - name: Rebuild and tag image
-        run: |
-          docker build . -t $IMAGE_BASE:$IMAGE_TAG
-          if [[ "${{ github.ref_name }}" == "main" ]]; then
-            docker tag $IMAGE_BASE:$IMAGE_TAG $IMAGE_BASE:latest
-          fi
-
-      - name: Push image
+      - name: Push Docker image
         run: |
           docker push $IMAGE_BASE:$IMAGE_TAG
           if [[ "${{ github.ref_name }}" == "main" ]]; then
             docker push $IMAGE_BASE:latest
           fi
 
+  # push_image:
+  #   if: github.ref_name == 'main' || github.ref_name == 'develop'
+  #   # needs: build_and_test
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     IMAGE_BASE: herreramaxi/spam-modelbuild
+  #     IMAGE_TAG: ${{ github.run_number }}
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: Login to Docker Hub
+  #       uses: docker/login-action@v1
+  #       with:
+  #         username: ${{ secrets.DOCKER_HUB_USERNAME }}
+  #         password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+  #     - name: Rebuild and tag image
+  #       run: |
+  #         docker build . -t $IMAGE_BASE:$IMAGE_TAG
+  #         if [[ "${{ github.ref_name }}" == "main" ]]; then
+  #           docker tag $IMAGE_BASE:$IMAGE_TAG $IMAGE_BASE:latest
+  #         fi
+
+  #     - name: Push image
+  #       run: |
+  #         docker push $IMAGE_BASE:$IMAGE_TAG
+  #         if [[ "${{ github.ref_name }}" == "main" ]]; then
+  #           docker push $IMAGE_BASE:latest
+  #         fi
+
   deploy:
     if: github.ref_name == 'main' || github.ref_name == 'develop'
-    needs: push_image
+    # needs: push_image
+    needs: build_and_test
     runs-on: ubuntu-latest
     env:
       IMAGE_BASE: herreramaxi/spam-modelbuild
