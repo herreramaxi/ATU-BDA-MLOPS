@@ -7,6 +7,8 @@ on:
       - develop
       - 'feature/**'
   workflow_dispatch:
+  repository_dispatch:
+    types: [trigger-ml-cicd]
 
 env:
   IMAGE_BASE: herreramaxi/spam-modelbuild
@@ -27,7 +29,6 @@ jobs:
           credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
           create_credentials_file: true
           export_environment_variables: true
-          token_format: 'access_token'
             
       - name: Print active auth (debug)
         run: |

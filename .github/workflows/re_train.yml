@@ -1,0 +1,57 @@
+name: Retrain Model on New Data
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * *"  # Every day at 2 AM UTC
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+        create_credentials_file: true
+        export_environment_variables: true
+
+    - name: Install dependencies
+      run: pip install pandas scikit-learn joblib gcsfs pytest
+
+    - name: Download existing dataset and new data from GCS
+      run: |
+        mkdir -p data/full data/new-data
+        gcloud storage cp gs://spam-data-pipeline/full/spam.csv data/full/spam.csv || echo "No full dataset found"
+        gcloud storage cp gs://spam-data-pipeline/new-data/*.csv data/new-data/ || echo "No new data found"
+
+    - name: Merge data and train model
+      run: python retrain.py
+
+    - name: Run model tests
+      run: pytest tests/
+
+    - name: Upload updated dataset to GCS
+      if: success()
+      run: |
+        gcloud storage cp data/full/spam.csv gs://spam-data-pipeline/full/spam.csv
+
+    - name: Archive new data files
+      if: success()
+      run: |
+        for f in data/new-data/*.csv; do
+          name=$(basename "$f")
+          gcloud storage cp "$f" gs://spam-data-pipeline/archive/"$name"
+        done
+        gcloud storage rm gs://spam-data-pipeline/new-data/*.csv || true
+
+    - name: Trigger CI/CD ML Workflow
+      if: success()
+      uses: peter-evans/repository-dispatch@v2
+      with:
+        token: ${{ secrets.GH_PAT }}
+        event-type: trigger-ml-cicd
