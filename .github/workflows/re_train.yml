@@ -29,9 +29,18 @@ jobs:
         gcloud storage cp gs://spam-data-pipeline/full/spam.csv data/full/spam.csv || echo "No full dataset found"
         gcloud storage cp gs://spam-data-pipeline/new-data/*.csv data/new-data/ || echo "No new data found"
 
-    - name: Merge data and train model
-      run: python retrain.py
+    - name: Check for data drift
+      id: drift
+      run: python check_drift.py
 
+    - name: Skip retraining if no drift
+      if: steps.drift.outcome == 'failure'
+      run: echo "Drift not detected. Skipping retraining." && exit 0
+
+    - name: Merge data and train model
+      if: steps.drift.outcome == 'success'
+      run: python retrain.py
+      
     - name: Run model tests
       run: pytest tests/
 
@@ -39,6 +48,7 @@ jobs:
       if: success()
       run: |
         gcloud storage cp data/full/spam.csv gs://spam-data-pipeline/full/spam.csv
+        gcloud storage cp drift_report.html gs://spam-data-pipeline/drift_reports/drift_report.html
 
     - name: Archive new data files
       if: success()
