@@ -8,6 +8,8 @@ on:
 jobs:
   retrain:
     runs-on: ubuntu-latest
+    env:
+      RUN_NUMBER: ${{ github.run_number }}
 
     steps:
     - name: Checkout code
@@ -48,7 +50,7 @@ jobs:
       if: success()
       run: |
         gcloud storage cp data/full/spam.csv gs://spam-data-pipeline/full/spam.csv
-        gcloud storage cp drift_report.html gs://spam-data-pipeline/drift_reports/drift_report.html
+        gcloud storage cp drift_report.html gs://spam-data-pipeline/drift_reports/drift_report_$RUN_NUMBER.html
 
     - name: Archive new data files
       if: success()

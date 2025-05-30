@@ -49,7 +49,8 @@ jobs:
 
       - name: Upload model to GCS using gcloud
         run: |
-          gcloud storage cp SpamModel.pkl gs://spam-data-pipeline/models/SpamModel.pkl
+          gcloud storage cp SpamModel.pkl gs://spam-data-pipeline/models/SpamModel_$IMAGE_TAG.pkl
+          gcloud storage cp model_metrics.json gs://spam-data-pipeline/models/model_metrics_$IMAGE_TAG.json
 
       # Tests not yet implemented
       # - name: Install test dependencies
