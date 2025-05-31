@@ -7,26 +7,28 @@ on:
       - develop
       - 'feature/**'
   workflow_dispatch:
-  repository_dispatch:
-    types: [trigger-ml-cicd]
+  workflow_call:
+    inputs:
+      branch:
+        required: true
+        type: string
 
 env:
   IMAGE_BASE: herreramaxi/spam-modelbuild
   IMAGE_TAG: ${{ github.run_number }}
 
 jobs:
-  build_and_push:
+  build_and_test:
     runs-on: ubuntu-latest
     outputs:
       branch: ${{ steps.setvars.outputs.branch }}
     steps:
-      - name: Detect triggering branch and environment
+      - name: Set environment vars
         id: setvars
         run: |
-          BRANCH="${{ github.event.client_payload.branch || github.ref_name }}"
+          BRANCH="${{ inputs.branch || github.ref_name }}"
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
           echo "SOURCE_BRANCH=$BRANCH" >> $GITHUB_ENV
-
           if [[ "$BRANCH" == "main" ]]; then
             echo "ENVIRONMENT=PROD" >> $GITHUB_ENV
           else
@@ -36,12 +38,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ steps.setvars.outputs.branch }}
-
-      - name: Show context
-        run: |
-          echo "Branch: $SOURCE_BRANCH"
-          echo "Environment: $ENVIRONMENT"
+          ref: ${{ inputs.branch }}
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -72,27 +69,27 @@ jobs:
             --build-arg BUILD=$IMAGE_TAG \
             --build-arg ENVIRONMENT=$ENVIRONMENT \
             -t $IMAGE_BASE:$IMAGE_TAG
+          if [[ "$SOURCE_BRANCH" == "main" ]]; then
+            docker tag $IMAGE_BASE:$IMAGE_TAG $IMAGE_BASE:latest
+          fi
 
       - name: Login and push Docker image
         run: |
           docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} -p ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
           docker push $IMAGE_BASE:$IMAGE_TAG
-
           if [[ "$SOURCE_BRANCH" == "main" ]]; then
-            docker tag $IMAGE_BASE:$IMAGE_TAG $IMAGE_BASE:latest
             docker push $IMAGE_BASE:latest
           fi
 
   deploy:
-    if: ${{ needs.build_and_push.outputs.branch == 'main' || needs.build_and_push.outputs.branch == 'develop' }}
-    needs: build_and_push
+    if: ${{ needs.build_and_test.outputs.branch == 'main' || needs.build_and_test.outputs.branch == 'develop' }}
+    needs: build_and_test
     runs-on: ubuntu-latest
     env:
       IMAGE_BASE: herreramaxi/spam-modelbuild
       IMAGE_TAG: ${{ github.run_number }}
-      SOURCE_BRANCH: ${{ needs.build_and_push.outputs.branch }}
-      ENVIRONMENT: ${{ needs.build_and_push.outputs.branch == 'main' && 'PROD' || 'DEV' }}
-      GKE_CLUSTER_NAME: ${{ needs.build_and_push.outputs.branch == 'main' && secrets.GKE_PROD_CLUSTER || secrets.GKE_DEV_CLUSTER }}
+      SOURCE_BRANCH: ${{ needs.build_and_test.outputs.branch }}
+      GKE_CLUSTER_NAME: ${{ needs.build_and_test.outputs.branch == 'main' && secrets.GKE_PROD_CLUSTER || secrets.GKE_DEV_CLUSTER }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -117,7 +114,7 @@ jobs:
 
       - name: Deploy to GKE
         run: |
-          echo "Deploying to $ENVIRONMENT from branch $SOURCE_BRANCH"
+          echo "Deploying to $SOURCE_BRANCH on cluster $GKE_CLUSTER_NAME"
           kubectl apply -f kubernetes/
           kubectl set image deployment/spam-app spam-app=$IMAGE_BASE:$IMAGE_TAG
           kubectl rollout status deployment/spam-app
