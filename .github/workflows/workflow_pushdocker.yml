@@ -15,20 +15,30 @@ env:
   IMAGE_TAG: ${{ github.run_number }}
 
 jobs:
-  build_and_test:
-    runs-on: ubuntu-latest    
-    env:
-      IMAGE_BASE: herreramaxi/spam-modelbuild
-      IMAGE_TAG: ${{ github.run_number }}
-      SOURCE_BRANCH: ${{ github.event.client_payload.branch || github.ref_name }}
-      ENVIRONMENT: ${{ github.event.client_payload.branch == 'main' || github.ref_name == 'main' && 'PROD' || 'DEV' }}
+  build_and_push:
+    runs-on: ubuntu-latest
+    outputs:
+      branch: ${{ steps.setvars.outputs.branch }}
     steps:
+      - name: Detect triggering branch and environment
+        id: setvars
+        run: |
+          BRANCH="${{ github.event.client_payload.branch || github.ref_name }}"
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "SOURCE_BRANCH=$BRANCH" >> $GITHUB_ENV
+
+          if [[ "$BRANCH" == "main" ]]; then
+            echo "ENVIRONMENT=PROD" >> $GITHUB_ENV
+          else
+            echo "ENVIRONMENT=DEV" >> $GITHUB_ENV
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.SOURCE_BRANCH }}
+          ref: ${{ steps.setvars.outputs.branch }}
 
-      - name: Show branch and environment
+      - name: Show context
         run: |
           echo "Branch: $SOURCE_BRANCH"
           echo "Environment: $ENVIRONMENT"
@@ -40,16 +50,10 @@ jobs:
           create_credentials_file: true
           export_environment_variables: true
 
-      - name: Print active auth (debug)
-        run: |
-          gcloud auth list
-          gcloud config list
-
       - name: Install dependencies
-        run: |
-          pip install pandas scikit-learn joblib pytest gcsfs
+        run: pip install pandas scikit-learn joblib pytest gcsfs
 
-      - name: Train model (loads dataset from GCS)
+      - name: Train model
         run: python model.py
         env:
           DATASET_PATH: gs://spam-data-pipeline/full/spam.csv
@@ -57,7 +61,7 @@ jobs:
       - name: Run tests
         run: pytest tests/
 
-      - name: Upload model to GCS using gcloud
+      - name: Upload model and metrics to GCS
         run: |
           gcloud storage cp SpamModel.pkl gs://spam-data-pipeline/models/SpamModel_$IMAGE_TAG.pkl
           gcloud storage cp model_metrics.json gs://spam-data-pipeline/models/model_metrics_$IMAGE_TAG.json
@@ -69,33 +73,26 @@ jobs:
             --build-arg ENVIRONMENT=$ENVIRONMENT \
             -t $IMAGE_BASE:$IMAGE_TAG
 
+      - name: Login and push Docker image
+        run: |
+          docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} -p ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+          docker push $IMAGE_BASE:$IMAGE_TAG
+
           if [[ "$SOURCE_BRANCH" == "main" ]]; then
             docker tag $IMAGE_BASE:$IMAGE_TAG $IMAGE_BASE:latest
-          fi
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-
-      - name: Push Docker image
-        run: |
-          docker push $IMAGE_BASE:$IMAGE_TAG
-          if [[ "$SOURCE_BRANCH" == "main" ]]; then
             docker push $IMAGE_BASE:latest
           fi
 
   deploy:
-    if: ${{ github.event.client_payload.branch == 'main' || github.ref_name == 'main' || github.event.client_payload.branch == 'develop' || github.ref_name == 'develop' }}
-    needs: build_and_test
+    if: ${{ needs.build_and_push.outputs.branch == 'main' || needs.build_and_push.outputs.branch == 'develop' }}
+    needs: build_and_push
     runs-on: ubuntu-latest
     env:
       IMAGE_BASE: herreramaxi/spam-modelbuild
       IMAGE_TAG: ${{ github.run_number }}
-      SOURCE_BRANCH: ${{ github.event.client_payload.branch || github.ref_name }}
-      ENVIRONMENT: ${{ github.event.client_payload.branch == 'main' || github.ref_name == 'main' && 'PROD' || 'DEV' }}
-      GKE_CLUSTER_NAME: ${{ github.event.client_payload.branch == 'main' || github.ref_name == 'main' && secrets.GKE_PROD_CLUSTER || secrets.GKE_DEV_CLUSTER }}
+      SOURCE_BRANCH: ${{ needs.build_and_push.outputs.branch }}
+      ENVIRONMENT: ${{ needs.build_and_push.outputs.branch == 'main' && 'PROD' || 'DEV' }}
+      GKE_CLUSTER_NAME: ${{ needs.build_and_push.outputs.branch == 'main' && secrets.GKE_PROD_CLUSTER || secrets.GKE_DEV_CLUSTER }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -120,7 +117,7 @@ jobs:
 
       - name: Deploy to GKE
         run: |
-          echo "Deploying to $ENVIRONMENT environment from branch $SOURCE_BRANCH"
+          echo "Deploying to $ENVIRONMENT from branch $SOURCE_BRANCH"
           kubectl apply -f kubernetes/
-          kubectl set image deployment/spam-app spam-app=${{ env.IMAGE_BASE }}:${{ env.IMAGE_TAG }}
+          kubectl set image deployment/spam-app spam-app=$IMAGE_BASE:$IMAGE_TAG
           kubectl rollout status deployment/spam-app
