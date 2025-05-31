@@ -13,7 +13,6 @@ on:
 env:
   IMAGE_BASE: herreramaxi/spam-modelbuild
   IMAGE_TAG: ${{ github.run_number }}
-  ENVIRONMENT: ${{ github.ref_name == 'main' && 'PROD' || 'DEV' }}
 
 jobs:
   build_and_test:
@@ -21,18 +20,26 @@ jobs:
     env:
       IMAGE_BASE: herreramaxi/spam-modelbuild
       IMAGE_TAG: ${{ github.run_number }}
+      SOURCE_BRANCH: ${{ github.event.client_payload.branch || github.ref_name }}
+      ENVIRONMENT: ${{ github.event.client_payload.branch == 'main' || github.ref_name == 'main' && 'PROD' || 'DEV' }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-            ref: ${{ github.event.client_payload.branch || github.ref_name }}
-      
+          ref: ${{ env.SOURCE_BRANCH }}
+
+      - name: Show branch and environment
+        run: |
+          echo "Branch: $SOURCE_BRANCH"
+          echo "Environment: $ENVIRONMENT"
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
           create_credentials_file: true
           export_environment_variables: true
-            
+
       - name: Print active auth (debug)
         run: |
           gcloud auth list
@@ -55,22 +62,14 @@ jobs:
           gcloud storage cp SpamModel.pkl gs://spam-data-pipeline/models/SpamModel_$IMAGE_TAG.pkl
           gcloud storage cp model_metrics.json gs://spam-data-pipeline/models/model_metrics_$IMAGE_TAG.json
 
-      # Tests not yet implemented
-      # - name: Install test dependencies
-      #   run: pip install -r requirements.txt
-
-      # - name: Run tests
-      #   run: pytest tests/
-
       - name: Build Docker image
-        # run: docker build . -t $IMAGE_BASE:$IMAGE_TAG
         run: |
           docker build . \
             --build-arg BUILD=$IMAGE_TAG \
             --build-arg ENVIRONMENT=$ENVIRONMENT \
             -t $IMAGE_BASE:$IMAGE_TAG
-          
-          if [[ "${{ github.ref_name }}" == "main" ]]; then
+
+          if [[ "$SOURCE_BRANCH" == "main" ]]; then
             docker tag $IMAGE_BASE:$IMAGE_TAG $IMAGE_BASE:latest
           fi
 
@@ -83,51 +82,25 @@ jobs:
       - name: Push Docker image
         run: |
           docker push $IMAGE_BASE:$IMAGE_TAG
-          if [[ "${{ github.ref_name }}" == "main" ]]; then
+          if [[ "$SOURCE_BRANCH" == "main" ]]; then
             docker push $IMAGE_BASE:latest
           fi
 
-  # push_image:
-  #   if: github.ref_name == 'main' || github.ref_name == 'develop'
-  #   # needs: build_and_test
-  #   runs-on: ubuntu-latest
-  #   env:
-  #     IMAGE_BASE: herreramaxi/spam-modelbuild
-  #     IMAGE_TAG: ${{ github.run_number }}
-  #   steps:
-  #     - uses: actions/checkout@v4
-
-  #     - name: Login to Docker Hub
-  #       uses: docker/login-action@v1
-  #       with:
-  #         username: ${{ secrets.DOCKER_HUB_USERNAME }}
-  #         password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-
-  #     - name: Rebuild and tag image
-  #       run: |
-  #         docker build . -t $IMAGE_BASE:$IMAGE_TAG
-  #         if [[ "${{ github.ref_name }}" == "main" ]]; then
-  #           docker tag $IMAGE_BASE:$IMAGE_TAG $IMAGE_BASE:latest
-  #         fi
-
-  #     - name: Push image
-  #       run: |
-  #         docker push $IMAGE_BASE:$IMAGE_TAG
-  #         if [[ "${{ github.ref_name }}" == "main" ]]; then
-  #           docker push $IMAGE_BASE:latest
-  #         fi
-
   deploy:
-    if: github.ref_name == 'main' || github.ref_name == 'develop'
-    # needs: push_image
+    if: ${{ github.event.client_payload.branch == 'main' || github.ref_name == 'main' || github.event.client_payload.branch == 'develop' || github.ref_name == 'develop' }}
     needs: build_and_test
     runs-on: ubuntu-latest
     env:
       IMAGE_BASE: herreramaxi/spam-modelbuild
       IMAGE_TAG: ${{ github.run_number }}
-      GKE_CLUSTER_NAME: ${{ github.ref_name == 'main' && secrets.GKE_PROD_CLUSTER || secrets.GKE_DEV_CLUSTER }}     
+      SOURCE_BRANCH: ${{ github.event.client_payload.branch || github.ref_name }}
+      ENVIRONMENT: ${{ github.event.client_payload.branch == 'main' || github.ref_name == 'main' && 'PROD' || 'DEV' }}
+      GKE_CLUSTER_NAME: ${{ github.event.client_payload.branch == 'main' || github.ref_name == 'main' && secrets.GKE_PROD_CLUSTER || secrets.GKE_DEV_CLUSTER }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -146,7 +119,8 @@ jobs:
           location: ${{ secrets.GKE_REGION }}
 
       - name: Deploy to GKE
-        run: |         
+        run: |
+          echo "Deploying to $ENVIRONMENT environment from branch $SOURCE_BRANCH"
           kubectl apply -f kubernetes/
           kubectl set image deployment/spam-app spam-app=${{ env.IMAGE_BASE }}:${{ env.IMAGE_TAG }}
           kubectl rollout status deployment/spam-app
