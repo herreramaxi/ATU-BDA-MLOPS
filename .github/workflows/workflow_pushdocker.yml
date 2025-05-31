@@ -56,6 +56,8 @@ jobs:
 
       - name: Run tests
         run: pytest tests/
+        env:
+          DATASET_PATH: gs://spam-data-pipeline/full/spam.csv
 
       - name: Upload model and metrics to GCS
         run: |

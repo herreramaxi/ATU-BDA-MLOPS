@@ -6,3 +6,4 @@ drift_report*
 *.pkl
 model_metrics.json
 drift_report.html
+*.pyc
