@@ -69,6 +69,6 @@ jobs:
         uses: benc-uk/workflow-dispatch@v1
         with:
           workflow: workflow_pushdocker.yml
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_PAT }}
           ref: ${{ github.ref }}
           inputs: '{"branch": "${{ github.ref_name }}"}'
