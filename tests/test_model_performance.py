@@ -7,10 +7,11 @@ from sklearn.metrics import accuracy_score, f1_score
 # Paths
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 MODEL_PATH = os.path.join(ROOT_DIR, "SpamModel.pkl")
-DATA_PATH = os.path.join(ROOT_DIR, "spam.csv")
+DATA_PATH =  os.getenv("DATASET_PATH", 'spam.csv')
 
 # Load and prepare data
 def load_data():
+    print(f"Loading dataset from: {DATA_PATH}")
     data = pd.read_csv(DATA_PATH)
     data['Spam'] = data['Category'].apply(lambda x: 1 if x == 'spam' else 0)
     
