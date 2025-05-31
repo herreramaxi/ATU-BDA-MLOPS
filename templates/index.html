@@ -16,11 +16,9 @@
         <button type="submit">Submit</button>
     </form>
     <footer>
-        {% if version %}
-        <p>Version: {{ version }}</p>
-        {% else %}
-        <p>Version: 1234</p>
-        {% endif %}
+        <p>Version: {{ version }}</p>      
+        <p>Build: {{ build }}</p>    
+        <p>Env: {{ environment }}</p>    
     </footer>
 </body>
 

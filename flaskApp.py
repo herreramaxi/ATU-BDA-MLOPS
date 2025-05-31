@@ -2,11 +2,13 @@ from flask import Flask, request, render_template
 from joblib import load
 import pandas as pd
 import numpy as np
-import pickle
+import os
 
 app=Flask(__name__)
 model=load("SpamModel.pkl")
 version = "1.0.3"
+build = os.getenv("BUILD", "N/A")
+environment = os.getenv("APP_ENV", "DEV")
 
 @app.route('/version')
 def welcome():
@@ -14,7 +16,7 @@ def welcome():
 
 @app.route("/")
 def home():
-    return render_template("index.html", version=version)
+    return render_template("index.html", version=version, build=build, environment=environment)
 
 @app.route('/predict')
 def predict_spam():
