@@ -24,10 +24,7 @@ on:
       GKE_DEV_CLUSTER:
         required: true
       GKE_REGION:
-        required: true
-      branch:
-        required: true
-        type: string
+        required: true  
 
 env:
   IMAGE_BASE: herreramaxi/spam-modelbuild
