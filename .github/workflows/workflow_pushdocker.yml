@@ -12,6 +12,22 @@ on:
       branch:
         required: true
         type: string
+    secrets:
+      GCP_CREDENTIALS:
+        required: true
+      DOCKER_HUB_USERNAME:
+        required: true
+      DOCKER_HUB_ACCESS_TOKEN:
+        required: true
+      GKE_PROD_CLUSTER:
+        required: true
+      GKE_DEV_CLUSTER:
+        required: true
+      GKE_REGION:
+        required: true
+      branch:
+        required: true
+        type: string
 
 env:
   IMAGE_BASE: herreramaxi/spam-modelbuild
