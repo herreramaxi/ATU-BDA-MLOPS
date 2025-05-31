@@ -6,7 +6,7 @@ import os
 
 app=Flask(__name__)
 model=load("SpamModel.pkl")
-version = "1.0.5"
+version = "1.0.6"
 build = os.getenv("BUILD", "N/A")
 environment = os.getenv("APP_ENV", "DEV")
 
