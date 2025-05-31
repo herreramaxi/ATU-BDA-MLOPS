@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        required: true
+        required: false
         type: string
 
 env:
