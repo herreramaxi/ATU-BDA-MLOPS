@@ -71,5 +71,4 @@ jobs:
           workflow: workflow_pushdocker.yml
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ github.ref }}
-          inputs: |
-            branch=${{ github.ref_name }}
+          inputs: '{"branch": "${{ github.ref_name }}"}'
