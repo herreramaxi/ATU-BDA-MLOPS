@@ -7,42 +7,49 @@ on:
       - develop
       - 'feature/**'
   workflow_dispatch:
-  repository_dispatch:
-    types: [trigger-ml-cicd]
+    inputs:
+      branch:
+        required: true
+        type: string
 
 env:
   IMAGE_BASE: herreramaxi/spam-modelbuild
   IMAGE_TAG: ${{ github.run_number }}
-  ENVIRONMENT: ${{ github.ref_name == 'main' && 'PROD' || 'DEV' }}
 
 jobs:
   build_and_test:
-    runs-on: ubuntu-latest    
-    env:
-      IMAGE_BASE: herreramaxi/spam-modelbuild
-      IMAGE_TAG: ${{ github.run_number }}
+    runs-on: ubuntu-latest
+    outputs:
+      branch: ${{ steps.setvars.outputs.branch }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Set environment vars
+        id: setvars
+        run: |
+          BRANCH="${{ inputs.branch || github.ref_name }}"
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "SOURCE_BRANCH=$BRANCH" >> $GITHUB_ENV
+          if [[ "$BRANCH" == "main" ]]; then
+            echo "ENVIRONMENT=PROD" >> $GITHUB_ENV
+          else
+            echo "ENVIRONMENT=DEV" >> $GITHUB_ENV
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-            ref: ${{ github.event.client_payload.branch || github.ref_name }}
-      
+          ref: ${{ inputs.branch }}
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
           create_credentials_file: true
           export_environment_variables: true
-            
-      - name: Print active auth (debug)
-        run: |
-          gcloud auth list
-          gcloud config list
 
       - name: Install dependencies
-        run: |
-          pip install pandas scikit-learn joblib pytest gcsfs
+        run: pip install pandas scikit-learn joblib pytest gcsfs
 
-      - name: Train model (loads dataset from GCS)
+      - name: Train model
         run: python model.py
         env:
           DATASET_PATH: gs://spam-data-pipeline/full/spam.csv
@@ -50,84 +57,43 @@ jobs:
       - name: Run tests
         run: pytest tests/
 
-      - name: Upload model to GCS using gcloud
+      - name: Upload model and metrics to GCS
         run: |
           gcloud storage cp SpamModel.pkl gs://spam-data-pipeline/models/SpamModel_$IMAGE_TAG.pkl
           gcloud storage cp model_metrics.json gs://spam-data-pipeline/models/model_metrics_$IMAGE_TAG.json
 
-      # Tests not yet implemented
-      # - name: Install test dependencies
-      #   run: pip install -r requirements.txt
-
-      # - name: Run tests
-      #   run: pytest tests/
-
       - name: Build Docker image
-        # run: docker build . -t $IMAGE_BASE:$IMAGE_TAG
         run: |
           docker build . \
             --build-arg BUILD=$IMAGE_TAG \
             --build-arg ENVIRONMENT=$ENVIRONMENT \
             -t $IMAGE_BASE:$IMAGE_TAG
-          
-          if [[ "${{ github.ref_name }}" == "main" ]]; then
+          if [[ "$SOURCE_BRANCH" == "main" ]]; then
             docker tag $IMAGE_BASE:$IMAGE_TAG $IMAGE_BASE:latest
           fi
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-
-      - name: Push Docker image
+      - name: Login and push Docker image
         run: |
+          docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} -p ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
           docker push $IMAGE_BASE:$IMAGE_TAG
-          if [[ "${{ github.ref_name }}" == "main" ]]; then
+          if [[ "$SOURCE_BRANCH" == "main" ]]; then
             docker push $IMAGE_BASE:latest
           fi
 
-  # push_image:
-  #   if: github.ref_name == 'main' || github.ref_name == 'develop'
-  #   # needs: build_and_test
-  #   runs-on: ubuntu-latest
-  #   env:
-  #     IMAGE_BASE: herreramaxi/spam-modelbuild
-  #     IMAGE_TAG: ${{ github.run_number }}
-  #   steps:
-  #     - uses: actions/checkout@v4
-
-  #     - name: Login to Docker Hub
-  #       uses: docker/login-action@v1
-  #       with:
-  #         username: ${{ secrets.DOCKER_HUB_USERNAME }}
-  #         password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-
-  #     - name: Rebuild and tag image
-  #       run: |
-  #         docker build . -t $IMAGE_BASE:$IMAGE_TAG
-  #         if [[ "${{ github.ref_name }}" == "main" ]]; then
-  #           docker tag $IMAGE_BASE:$IMAGE_TAG $IMAGE_BASE:latest
-  #         fi
-
-  #     - name: Push image
-  #       run: |
-  #         docker push $IMAGE_BASE:$IMAGE_TAG
-  #         if [[ "${{ github.ref_name }}" == "main" ]]; then
-  #           docker push $IMAGE_BASE:latest
-  #         fi
-
   deploy:
-    if: github.ref_name == 'main' || github.ref_name == 'develop'
-    # needs: push_image
+    if: ${{ needs.build_and_test.outputs.branch == 'main' || needs.build_and_test.outputs.branch == 'develop' }}
     needs: build_and_test
     runs-on: ubuntu-latest
     env:
       IMAGE_BASE: herreramaxi/spam-modelbuild
       IMAGE_TAG: ${{ github.run_number }}
-      GKE_CLUSTER_NAME: ${{ github.ref_name == 'main' && secrets.GKE_PROD_CLUSTER || secrets.GKE_DEV_CLUSTER }}     
+      SOURCE_BRANCH: ${{ needs.build_and_test.outputs.branch }}
+      GKE_CLUSTER_NAME: ${{ needs.build_and_test.outputs.branch == 'main' && secrets.GKE_PROD_CLUSTER || secrets.GKE_DEV_CLUSTER }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -146,7 +112,8 @@ jobs:
           location: ${{ secrets.GKE_REGION }}
 
       - name: Deploy to GKE
-        run: |         
+        run: |
+          echo "Deploying to $SOURCE_BRANCH on cluster $GKE_CLUSTER_NAME"
           kubectl apply -f kubernetes/
-          kubectl set image deployment/spam-app spam-app=${{ env.IMAGE_BASE }}:${{ env.IMAGE_TAG }}
+          kubectl set image deployment/spam-app spam-app=$IMAGE_BASE:$IMAGE_TAG
           kubectl rollout status deployment/spam-app
