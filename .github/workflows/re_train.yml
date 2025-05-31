@@ -67,3 +67,4 @@ jobs:
       with:
         token: ${{ secrets.GH_PAT }}
         event-type: trigger-ml-cicd
+        client-payload: '{"branch": "${{ github.ref_name }}", "source": "retrain"}'

@@ -13,6 +13,7 @@ on:
 env:
   IMAGE_BASE: herreramaxi/spam-modelbuild
   IMAGE_TAG: ${{ github.run_number }}
+  ENVIRONMENT: ${{ github.ref_name == 'main' && 'PROD' || 'DEV' }}
 
 jobs:
   build_and_test:
@@ -22,7 +23,9 @@ jobs:
       IMAGE_TAG: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
-
+        with:
+            ref: ${{ github.event.client_payload.branch || 'main' }}
+      
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -62,7 +65,11 @@ jobs:
       - name: Build Docker image
         # run: docker build . -t $IMAGE_BASE:$IMAGE_TAG
         run: |
-          docker build . -t $IMAGE_BASE:$IMAGE_TAG
+          docker build . \
+            --build-arg BUILD=$IMAGE_TAG \
+            --build-arg ENVIRONMENT=$ENVIRONMENT \
+            -t $IMAGE_BASE:$IMAGE_TAG
+          
           if [[ "${{ github.ref_name }}" == "main" ]]; then
             docker tag $IMAGE_BASE:$IMAGE_TAG $IMAGE_BASE:latest
           fi

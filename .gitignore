@@ -3,3 +3,6 @@ data/full/*
 data/new-data/*
 
 drift_report*
+*.pkl
+model_metrics.json
+drift_report.html

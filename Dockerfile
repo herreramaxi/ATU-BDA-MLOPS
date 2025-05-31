@@ -2,6 +2,12 @@ FROM python:3.8
 EXPOSE 5001
 WORKDIR /opt/app
 
+ARG BUILD
+ARG ENVIRONMENT
+
+ENV BUILD=$BUILD
+ENV APP_ENV=$ENVIRONMENT
+
 # Copy app files
 COPY flaskApp.py /opt/app/
 COPY SpamModel.pkl /opt/app/
